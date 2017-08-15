@@ -1,18 +1,64 @@
-;;; org-onenote.el --- org-mode onenote API integration
+;;; org-onenote.el --- export org-mode document to onenote.
+;; Copyright (C) 2017 Frei Zhang
+
+;; Author: Frei Zhang <ifree0@gmail.com>
+;; Maintainer: Frei Zhang <ifree0@gmail.com>
+;; Homepage: https://github.com/ifree/org-onenote
+;; Created: 15th Aug 2017
+;; Version: 0.1
+;; Keywords: org-mode, onenote
+;; Package-Requires: ((oauth2 "0.11") (request "20170131.1747") (org "8.2.10") (mailcap "21.1"))
+
+;; This file is NOT part of GNU Emacs.
+
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 3, or (at your option)
+;; any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with GNU Emacs; see the file LICENSE.  If not, write to the
+;; Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301, USA.
 
 ;;; Commentary:
-;; Export org-mode article to onenote.
-;; Maybe integrate org-mode exporter framework if I have time.
+;;; Summary
+;; this package provides org-mode buffer to onenote exporting, images and code
+;; highlighting are supported.
+
+;;; Usage
+;; before post your document to onenote, you need grant access to org-onenote for
+;; accessing your onenote by invoke `org-onenote-start-authenticate`.
+
+;; to specify which section your org document will post to, you need add custom org
+;; keyword "ONENOTE-SECTION" to it.  eg.
+
+;; #+ONENOTE-SECTION: Frei's Notebook/Tech Notes/Common
+
+;; org-onenote will look up section id from `org-onenote-section-map` by your
+;; specified section, which can be generate by `onenote-insert-section-map-at-pt`
+;; eg.
+
+;; (setq org-onenote-section-map '(("Frei's Notebook/Programming Language/C++"
+;; . "THE-ID")))
+
+;; to post your document by invoke `org-onenote-submit-page`, server side note id
+;; will be recorded after a successful post.  You can delete it by invoke
+;; `org-onenote-delete-page`
+
+
+;;; Code:
 
 (require 'oauth2)
 (require 'request)
 (require 'mailcap)			;for mime type detection
 (require 'org-element)			;org element api
 (require 'ox)				;org export api
-
-;;; Code:
-
-(defvar org-onenote-client-id "d6c99b4d-fda1-48f0-9e0f-22103e544413")
 
 (defvar org-onenote-auth-url "https://login.live.com/oauth20_authorize.srf")
 
@@ -60,6 +106,9 @@
   :group 'org
   :prefix "org-onenote-")
 
+(defcustom org-onenote-client-id "d6c99b4d-fda1-48f0-9e0f-22103e544413"
+  "Oneonte app client id, you can register yours on onenote dev site.")
+
 (defcustom org-onenote-token-file
   (concat user-emacs-directory "org-onenote-oauth2.plstore")
   "Plstore to store onenote oauth2 token, also be used for token
@@ -89,8 +138,9 @@
 </html>"
   "Html template.")
 
-(defun org-onenote-start-authencate ()
-  "Start OAuth2 authencate."
+;;;###autoload
+(defun org-onenote-start-authenticate ()
+  "Start OAuth2 authenticate."
   (interactive)
   (let ((oauth2-token-file org-onenote-token-file))
    (setq *org-onenote-stored-token*
@@ -135,6 +185,7 @@ Construct `(Notebook/[SectionGroup]/Section . Section-id)` like assoc list for s
      data)))
 
 
+;;;###autoload
 (defun org-onenote-insert-section-map-at-pt ()
   (interactive)
   "Insert section map at current point. You may use it as your config."
@@ -172,11 +223,6 @@ Construct `(Notebook/[SectionGroup]/Section . Section-id)` like assoc list for s
 	    (setq ret (push `(,block-name . (,block-name :file ,src :mime-type ,(mailcap-extension-to-mime (file-name-extension src)))) ret))
 	    (setq start-index (1+ start-index))))))
     ret))
-
-(defun org-onenote-process-html ()
-  "Must run inside org-export*."
-  (let ()
-    ))
 
 (defun org-onenote-html-get-request-data ()
   "Export org-mode BUFFER to post data."
@@ -242,6 +288,7 @@ Construct `(Notebook/[SectionGroup]/Section . Section-id)` like assoc list for s
       id t)
       (message "invalid response"))))
 
+;;;###autoload
 (defun org-onenote-submit-page ()
   (interactive)
   ;; if-let?
@@ -249,8 +296,7 @@ Construct `(Notebook/[SectionGroup]/Section . Section-id)` like assoc list for s
   	 (section-id (org-onenote-get-section-id (car section-name))))
 
     (when section-id
-      (let* (
-	     (files (org-onenote-html-get-request-data)))
+      (let* ((files (org-onenote-html-get-request-data)))
   	(org-onenote-api-call
   	 (format org-onenote-api-path-pages-post section-id)
 	 :type "POST"
@@ -262,22 +308,23 @@ Construct `(Notebook/[SectionGroup]/Section . Section-id)` like assoc list for s
 	    (print data)))
 	 :files files)))))
 
+;;;###autoload
 (defun org-onenote-delete-page (&optional id)
   "Delete page from server by optional ID, default current page."
   (interactive)
-  (let ((page-id (car (org-onenote-get-keyword-val org-onenote--keyword-page-id))))
+  (let ((page-id (or id (car (org-onenote-get-keyword-val org-onenote--keyword-page-id)))))
 
     (when page-id
       (org-onenote-api-call
        (format org-onenote-api-path-pages-delete page-id)
-       :type
+       :type "DELETE"
        :success (cl-function (lambda (&key data &allow-other-keys)
-	  (message "delete success!")
-	  (org-onenote-set-keyword-val org-onenote--keyword-page-id nil)
-	  ))
+			       (message "delete success!")
+			       (org-onenote-set-keyword-val org-onenote--keyword-page-id nil)
+			       ))
        :error (cl-function (lambda (&key data &allow-other-keys)
-	  (message "error!")
-	  (print data)))))))
+			     (message "error!")
+			     (print data)))))))
 
 
 (provide 'org-onenote)
