@@ -1,0 +1,5 @@
+* org onenote
+Export Org-mode buffer to onenote.
+
+
+
