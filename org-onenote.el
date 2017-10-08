@@ -5,9 +5,9 @@
 ;; Maintainer: Frei Zhang <ifree0@gmail.com>
 ;; Homepage: https://github.com/ifree/org-onenote
 ;; Created: 15th Aug 2017
-;; Version: 0.1
-;; Keywords: org-mode, onenote
-;; Package-Requires: ((oauth2 "0.11") (request "20170131.1747") (org "8.2.10") (mailcap "21.1"))
+;; Version: 0.1.0
+;; Keywords: tools, docs, org-mode, onenote
+;; Package-Requires: ((oauth2 "0.11") (request "0.2.0") (org "8.2.10"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -89,7 +89,7 @@
 
 (defvar org-onenote-api-path-pages-delete "/v1.0/me/notes/pages/%s/")
 
-(defvar *org-onenote-stored-token* nil)
+(defvar org-onenote--stored-token nil)
 
 ;; get image width&height
 (defvar org-onenote-get-img-dimenton-func (lambda (file)
@@ -149,20 +149,20 @@
   "Start OAuth2 authenticate."
   (interactive)
   (let ((oauth2-token-file org-onenote-token-file))
-   (setq *org-onenote-stored-token*
+   (setq org-onenote--stored-token
 	 (oauth2-auth-and-store org-onenote-auth-url org-onenote-token-refresh-url org-onenote-auth-scope org-onenote-client-id nil org-onenote-auth-implicit-grant-url))))
 
 
 (defun org-onenote-get-auth-token ()
   "Get raw auth token."
-  (oauth2-token-access-token *org-onenote-stored-token*))
+  (oauth2-token-access-token org-onenote--stored-token))
 
 (defun org-onenote-may-refresh-token ()
   "Refresh token based on token store modification time."
   (let ((token-modify-time (nth 5(file-attributes org-onenote-token-file)))
 	(now (current-time)))
     (when (time-less-p (time-add token-modify-time org-onenote-token-expire-time) now)
-      (setq *org-onenote-stored-token* (oauth2-refresh-access *org-onenote-stored-token*)))))
+      (setq org-onenote--stored-token (oauth2-refresh-access org-onenote--stored-token)))))
 
 
 (defun org-onenote-api-call (path &rest args)
