@@ -51,6 +51,7 @@
 ;; will be recorded after a successful post.  You can delete it by invoke
 ;; `org-onenote-delete-page`
 
+;;; TODO: patch
 
 ;;; Code:
 
@@ -89,6 +90,11 @@
 (defvar org-onenote-api-path-pages-delete "/v1.0/me/notes/pages/%s/")
 
 (defvar *org-onenote-stored-token* nil)
+
+;; get image width&height
+(defvar org-onenote-get-img-dimenton-func (lambda (file)
+					    (when (executable-find "identify")
+					      (shell-command-to-string (concat "identify -format \"width='%w' height='%h'\" " file)))))
 
 ;;; org stuff
 
@@ -219,7 +225,8 @@ Construct `(Notebook/[SectionGroup]/Section . Section-id)` like assoc list for s
 		(setq src (substring src 5))))
 	  (when (file-exists-p src)
 	    (setq src (expand-file-name src))
-	    (replace-match (format "<img src=\"name:%s\"" block-name))
+	    
+	    (replace-match (format "<img src=\"name:%s\" %s" block-name (funcall org-onenote-get-img-dimenton-func src)))
 	    (setq ret (push `(,block-name . (,block-name :file ,src :mime-type ,(mailcap-extension-to-mime (file-name-extension src)))) ret))
 	    (setq start-index (1+ start-index))))))
     ret))
@@ -290,6 +297,7 @@ Construct `(Notebook/[SectionGroup]/Section . Section-id)` like assoc list for s
 
 ;;;###autoload
 (defun org-onenote-submit-page ()
+  "Submit it."
   (interactive)
   ;; if-let?
   (let* ((section-name (org-onenote-get-keyword-val org-onenote--keyword-section-name))
